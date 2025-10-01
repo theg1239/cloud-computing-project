@@ -1,98 +1,76 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { PageHeader } from '@/components/ui/header';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ListItem } from '@/components/ui/list-item';
+import { ScreenScroll } from '@/components/ui/screen';
+import { Section } from '@/components/ui/section';
+import { useAuth } from '@/lib/auth';
+import { can } from '@/lib/rbac';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { Pressable, StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { user } = useAuth();
+  const router = useRouter();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <ScreenScroll contentContainerStyle={styles.container}>
+        <PageHeader
+          title={user ? `Hi, ${user.name.split(' ')[0]}` : 'Welcome'}
+          subtitle="What would you like to do?"
+          icon="sparkles"
+          right={
+            <Pressable onPress={() => router.push('/(tabs)/notifications')} style={{ padding: 6 }}>
+              <IconSymbol name="bell" color={'#888'} size={22} />
+            </Pressable>
+          }
+        />
+
+      <Section title="Actions">
+        <ThemedView variant="surface" style={styles.list}>
+          {can(user, 'lab:book') && (
+            <ListItem icon="calendar" title="Find a lab slot" subtitle="Book lab time" onPress={() => router.push('/(tabs)/book')} />
+          )}
+          {can(user, 'booking:view') && (
+            <ListItem icon="clock" title="My bookings" subtitle="View and manage" onPress={() => router.push('/(tabs)/bookings')} />
+          )}
+          {can(user, 'maintenance:report') && (
+            <ListItem icon="wrench.and.screwdriver" title="Report an issue" subtitle="Create maintenance ticket" onPress={() => router.push('/(tabs)/report-issue')} />
+          )}
+          {can(user, 'maintenance:view') && (
+            <ListItem icon="list.bullet.rectangle" title="Maintenance queue" subtitle="See open tickets" onPress={() => router.push('/(tabs)/maintenance')} />
+          )}
+          {can(user, 'equipment:view') && (
+            <ListItem icon="cube.box" title="Browse equipment" subtitle="Availability and status" onPress={() => router.push('/(tabs)/equipment')} />
+          )}
+          {can(user, 'experiment:upload') && (
+            <ListItem icon="doc.text" title="Upload report" subtitle="Attach to an experiment" onPress={() => router.push('/(tabs)/upload-report')} />
+          )}
+          {can(user, 'equipment:request') && (
+            <ListItem icon="plus.circle" title="Request equipment" subtitle="Ask admin to add gear" onPress={() => router.push('/(tabs)/request-equipment')} />
+          )}
+          {can(user, 'users:manage') && (
+            <ListItem icon="person.2" title="Manage users" subtitle="Roles and access" onPress={() => router.push('/(tabs)/users')} />
+          )}
+          {!can(user, 'lab:book') &&
+            !can(user, 'booking:view') &&
+            !can(user, 'maintenance:report') &&
+            !can(user, 'maintenance:view') &&
+            !can(user, 'equipment:view') &&
+            !can(user, 'users:manage') && (
+              <ListItem icon="magnifyingglass" title="Browse" subtitle="Explore labs and equipment" onPress={() => router.push('/(tabs)/explore')} />
+            )}
+        </ThemedView>
+      </Section>
+    </ScreenScroll>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  container: { gap: 16 },
+  list: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
