@@ -35,17 +35,33 @@ const RegisterSchema = z.object({
 });
 
 app.post('/auth/login', async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const parsed = EmailSchema.safeParse(body?.email);
+  const started = Date.now();
+  const reqId = `auth-login-${started}-${Math.random().toString(36).slice(2,8)}`;
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  console.log(`[AUTH][LOGIN][${reqId}] body:`, body);
+  const rawEmail = body?.email;
+  const parsed = EmailSchema.safeParse(rawEmail);
   if (!parsed.success) {
+    console.log(`[AUTH][LOGIN][${reqId}] invalid email`, rawEmail);
     return c.json({ ok: false, error: 'Invalid email' }, 400);
   }
-  const rows = await db.select().from(schema.users).where(eq(schema.users.email, parsed.data)).limit(1);
+  let rows: any[] = [];
+  try {
+    rows = await db.select().from(schema.users).where(eq(schema.users.email, parsed.data)).limit(1);
+  } catch (err) {
+    console.log(`[AUTH][LOGIN][${reqId}] DB error:`, (err as any)?.message || err);
+    return c.json({ ok: false, error: 'Server error' }, 500);
+  }
   const user = rows[0];
   if (!user) {
+    console.log(`[AUTH][LOGIN][${reqId}] user not found for`, parsed.data);
     return c.json({ ok: false, error: 'User not found' }, 404);
   }
-  // Force explicit JSON structure (avoid implicit serialization edge cases)
   const payload = {
     ok: true,
     id: user.id,
@@ -55,7 +71,9 @@ app.post('/auth/login', async (c) => {
     department: user.department ?? null,
     createdAt: user.createdAt,
   };
-  return new Response(JSON.stringify(payload), {
+  const json = JSON.stringify(payload);
+  console.log(`[AUTH][LOGIN][${reqId}] success payloadLength=${json.length}B duration=${Date.now()-started}ms userId=${user.id}`);
+  return new Response(json, {
     status: 200,
     headers: {
       'content-type': 'application/json; charset=utf-8',
@@ -65,16 +83,27 @@ app.post('/auth/login', async (c) => {
 });
 
 app.post('/auth/register', async (c) => {
-  const body = await c.req.json().catch(() => ({}));
+  const started = Date.now();
+  const reqId = `auth-register-${started}-${Math.random().toString(36).slice(2,8)}`;
+  let body: any = {};
+  try { body = await c.req.json(); } catch { body = {}; }
+  console.log(`[AUTH][REGISTER][${reqId}] body:`, body);
   const parsed = RegisterSchema.safeParse(body);
   if (!parsed.success) {
+    console.log(`[AUTH][REGISTER][${reqId}] invalid input`, parsed.error.flatten());
     return c.json({ ok: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
   }
   const { email, name, roleName, department } = parsed.data;
-  const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+  let existing: any[] = [];
+  try {
+    existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+  } catch (err) {
+    console.log(`[AUTH][REGISTER][${reqId}] DB error finding existing:`, (err as any)?.message || err);
+    return c.json({ ok: false, error: 'Server error' }, 500);
+  }
   if (existing[0]) {
     const u = existing[0];
-    return new Response(JSON.stringify({
+    const payload = {
       ok: true,
       id: u.id,
       name: u.name,
@@ -83,11 +112,20 @@ app.post('/auth/register', async (c) => {
       department: u.department ?? null,
       createdAt: u.createdAt,
       reused: true,
-    }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+    };
+    const json = JSON.stringify(payload);
+    console.log(`[AUTH][REGISTER][${reqId}] reused existing user payloadLength=${json.length}B duration=${Date.now()-started}ms userId=${u.id}`);
+    return new Response(json, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
   }
-  const inserted = await db.insert(schema.users).values({ email, name, roleName, department }).returning();
+  let inserted: any[] = [];
+  try {
+    inserted = await db.insert(schema.users).values({ email, name, roleName, department }).returning();
+  } catch (err) {
+    console.log(`[AUTH][REGISTER][${reqId}] DB error inserting:`, (err as any)?.message || err);
+    return c.json({ ok: false, error: 'Server error' }, 500);
+  }
   const nu = inserted[0];
-  return new Response(JSON.stringify({
+  const payload = {
     ok: true,
     id: nu.id,
     name: nu.name,
@@ -96,7 +134,10 @@ app.post('/auth/register', async (c) => {
     department: nu.department ?? null,
     createdAt: nu.createdAt,
     reused: false,
-  }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+  };
+  const json = JSON.stringify(payload);
+  console.log(`[AUTH][REGISTER][${reqId}] created new user payloadLength=${json.length}B duration=${Date.now()-started}ms userId=${nu.id}`);
+  return new Response(json, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 });
 
 // Authenticated routes
