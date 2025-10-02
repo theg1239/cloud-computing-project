@@ -151,6 +151,7 @@ export async function restPostMaybe<T = any>(path: string, body: any): Promise<{
   const startedAt = Date.now();
   const headers: Record<string, string> = {
     'content-type': 'application/json',
+    'accept': 'application/json',
     ...(authToken ? { 'x-user': authToken } : {}),
   };
   if (LOG_ENABLED) {

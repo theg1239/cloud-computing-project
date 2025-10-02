@@ -66,8 +66,10 @@ const rolePermissions: Record<Role, Permission[]> = {
 };
 
 export function can(user: Pick<User, 'role'> | null | undefined, permission: Permission) {
-  if (!user) return false;
-  return rolePermissions[user.role].includes(permission);
+  if (!user || !user.role) return false;
+  const perms = rolePermissions[user.role as Role];
+  if (!perms) return false;
+  return perms.includes(permission);
 }
 
 export function permissionsFor(role: Role): Permission[] {

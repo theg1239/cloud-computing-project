@@ -1,6 +1,6 @@
 import { api as mock } from '@/lib/mockApi';
 import { Booking, DocumentRef, DocumentType, Equipment, Experiment, Lab, MaintenanceTicket, Notification, User } from '@/types/models';
-import { API_URL, gqlRequest, restPost, restPostMaybe, setAuthToken } from './http';
+import { API_URL, gqlRequest, restPostMaybe, setAuthToken } from './http';
 
 const isServerEnabled = !!API_URL;
 
@@ -10,12 +10,24 @@ export const api = {
     if (!isServerEnabled) return mock.loginWithEmail(email);
     // Try login and return a special error if not found
     const res = await restPostMaybe<User>('/auth/login', { email });
+    // Some environments return 200 with empty body when user not found – treat as not found
     if (res.ok && res.data) {
-      const user = res.data as any;
+      const raw: any = res.data;
+      const valid = raw && raw.id && raw.email && (raw.roleName || raw.role);
+      if (!valid) {
+        const err: any = new Error('USER_NOT_FOUND');
+        err.code = 'USER_NOT_FOUND';
+        throw err;
+      }
       setAuthToken(email);
-      return { id: user.id, name: user.name, email: user.email, role: user.roleName, department: user.department };
+      return { id: raw.id, name: raw.name, email: raw.email, role: raw.roleName || raw.role, department: raw.department };
     }
-    if (res.status === 404) {
+    if (res.ok && !res.data) {
+      const err: any = new Error('USER_NOT_FOUND');
+      err.code = 'USER_NOT_FOUND';
+      throw err;
+    }
+    if (res.status === 404 || (typeof res.error === 'object' && (res.error as any)?.error === 'User not found')) {
       const err: any = new Error('USER_NOT_FOUND');
       err.code = 'USER_NOT_FOUND';
       throw err;
@@ -36,10 +48,35 @@ export const api = {
         department: input.department,
       } as any;
     }
-    const created = await restPost<User>('/auth/register', input);
-    setAuthToken(input.email);
-    const u: any = created;
-    return { id: u.id, name: u.name, email: u.email, role: u.roleName, department: u.department };
+    const created = await restPostMaybe<User>('/auth/register', input);
+    // Some backends might (incorrectly) return 200 with empty body for new registration.
+    if (created.ok && created.data) {
+      const raw: any = created.data;
+      const valid = raw && raw.id && raw.email && (raw.roleName || raw.role);
+      if (!valid) {
+        // Attempt immediate login fallback (maybe user already existed but body omitted)
+        try {
+          return await this.loginWithEmail(input.email);
+        } catch {
+          const err: any = new Error('REGISTRATION_INCOMPLETE');
+          err.code = 'REGISTRATION_INCOMPLETE';
+          throw err;
+        }
+      }
+      setAuthToken(input.email);
+      return { id: raw.id, name: raw.name, email: raw.email, role: raw.roleName || raw.role, department: raw.department };
+    }
+    if (created.ok && !created.data) {
+      // Try login next; if still missing, guide user to onboarding
+      try {
+        return await this.loginWithEmail(input.email);
+      } catch (e: any) {
+        const err: any = new Error('REGISTRATION_PENDING_BACKEND');
+        err.code = 'REGISTRATION_PENDING_BACKEND';
+        throw err;
+      }
+    }
+    throw new Error(typeof created.error === 'string' ? created.error : created.error?.error || 'Registration failed');
   },
   async quickPick(userId: string): Promise<User> {
     if (!isServerEnabled) {

@@ -37,22 +37,66 @@ const RegisterSchema = z.object({
 app.post('/auth/login', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = EmailSchema.safeParse(body?.email);
-  if (!parsed.success) return c.json({ error: 'Invalid email' }, 400);
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Invalid email' }, 400);
+  }
   const rows = await db.select().from(schema.users).where(eq(schema.users.email, parsed.data)).limit(1);
   const user = rows[0];
-  if (!user) return c.json({ error: 'User not found' }, 404);
-  return c.json(user);
+  if (!user) {
+    return c.json({ ok: false, error: 'User not found' }, 404);
+  }
+  // Force explicit JSON structure (avoid implicit serialization edge cases)
+  const payload = {
+    ok: true,
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    roleName: user.roleName,
+    department: user.department ?? null,
+    createdAt: user.createdAt,
+  };
+  return new Response(JSON.stringify(payload), {
+    status: 200,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
 });
 
 app.post('/auth/register', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = RegisterSchema.safeParse(body);
-  if (!parsed.success) return c.json({ error: 'Invalid input', details: parsed.error.flatten() }, 400);
+  if (!parsed.success) {
+    return c.json({ ok: false, error: 'Invalid input', details: parsed.error.flatten() }, 400);
+  }
   const { email, name, roleName, department } = parsed.data;
   const existing = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
-  if (existing[0]) return c.json(existing[0]);
+  if (existing[0]) {
+    const u = existing[0];
+    return new Response(JSON.stringify({
+      ok: true,
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      roleName: u.roleName,
+      department: u.department ?? null,
+      createdAt: u.createdAt,
+      reused: true,
+    }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+  }
   const inserted = await db.insert(schema.users).values({ email, name, roleName, department }).returning();
-  return c.json(inserted[0]);
+  const nu = inserted[0];
+  return new Response(JSON.stringify({
+    ok: true,
+    id: nu.id,
+    name: nu.name,
+    email: nu.email,
+    roleName: nu.roleName,
+    department: nu.department ?? null,
+    createdAt: nu.createdAt,
+    reused: false,
+  }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 });
 
 // Authenticated routes
