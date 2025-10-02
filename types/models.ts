@@ -2,11 +2,11 @@ export type Role = 'ADMIN' | 'FACULTY' | 'STUDENT' | 'TECHNICIAN';
 
 export type LabStatus = 'OPEN' | 'CLOSED';
 export type EquipmentStatus = 'AVAILABLE' | 'IN_USE' | 'UNDER_MAINTENANCE';
-export type BookingStatus = 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
 export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH';
 export type DocumentType = 'REPORT' | 'RESULT' | 'SOP';
-export type NotificationType = 'MAINTENANCE' | 'BOOKING' | 'SYSTEM';
+export type NotificationType = 'MAINTENANCE' | 'BOOKING' | 'SYSTEM' | 'BOOKING_REQUEST' | 'BOOKING_APPROVED' | 'BOOKING_REJECTED';
 
 export interface User {
   id: string;
@@ -45,6 +45,8 @@ export interface Booking {
   endTime: string; // ISO date
   purpose?: string;
   status: BookingStatus;
+  approvedBy?: string;
+  approvedAt?: string; // ISO date
   createdAt: string; // ISO date
 }
 
@@ -90,6 +92,7 @@ export interface Notification {
   createdAt: string;
   read: boolean;
   relatedId?: string; // bookingId, ticketId, etc.
+  metadata?: string; // JSON string with additional context
 }
 
 export interface EquipmentRequest {

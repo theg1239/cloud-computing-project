@@ -166,10 +166,59 @@ export const api = {
     }
   },
   async listNotifications(userId?: string): Promise<Notification[]> {
-    return mock.listNotifications(userId);
+    if (!isServerEnabled) return mock.listNotifications(userId);
+    try {
+      const data = await gqlRequest<{ myNotifications: Notification[] }>(
+        `query { myNotifications { id userId type message relatedId metadata createdAt read } }`
+      );
+      return data.myNotifications as any;
+    } catch (err: any) {
+      console.error('Failed to fetch notifications:', err);
+      return [];
+    }
   },
   async markNotificationRead(id: string): Promise<void> {
-    return mock.markNotificationRead(id);
+    if (!isServerEnabled) return mock.markNotificationRead(id);
+    await gqlRequest<{ markNotificationRead: boolean }>(
+      `mutation($id: ID!) { markNotificationRead(id: $id) }`,
+      { id }
+    );
+  },
+  async approveBooking(id: string): Promise<Booking> {
+    const data = await gqlRequest<{ approveBooking: Booking }>(
+      `mutation($id: ID!) { approveBooking(id: $id) { id labId userId startTime endTime purpose status approvedBy approvedAt createdAt } }`,
+      { id }
+    );
+    return data.approveBooking as any;
+  },
+  async rejectBooking(id: string): Promise<Booking> {
+    const data = await gqlRequest<{ rejectBooking: Booking }>(
+      `mutation($id: ID!) { rejectBooking(id: $id) { id labId userId startTime endTime purpose status approvedBy approvedAt createdAt } }`,
+      { id }
+    );
+    return data.rejectBooking as any;
+  },
+  async listPendingBookings(): Promise<Booking[]> {
+    try {
+      const data = await gqlRequest<{ pendingBookings: Booking[] }>(
+        `query { pendingBookings { id labId userId startTime endTime purpose status approvedBy approvedAt createdAt } }`
+      );
+      return data.pendingBookings as any;
+    } catch (err: any) {
+      const msg = (err?.message || '').toString().toLowerCase();
+      if (msg.includes('forbidden') || msg.includes('unauthorized')) return [];
+      throw err;
+    }
+  },
+  async uploadPDF(experimentId: string, input: { type: DocumentType; title: string; fileUri: string; fileName: string }): Promise<DocumentRef> {
+    // For now, we'll store the fileUri directly. In production, you'd upload to cloud storage first
+    const cloudUrl = input.fileUri; // This would be replaced with actual cloud storage URL
+    return this.uploadExperimentDocument(experimentId, {
+      type: input.type,
+      title: input.title,
+      url: cloudUrl,
+      uploadedByUserId: 'current-user',
+    });
   },
   async createEquipmentRequest(input: Parameters<typeof mock.createEquipmentRequest>[0]) {
     return mock.createEquipmentRequest(input);

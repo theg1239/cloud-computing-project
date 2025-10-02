@@ -1,3 +1,4 @@
+import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
@@ -26,17 +27,33 @@ export default function TabLayout() {
           bottom: 16,
           height: 64,
           borderRadius: 32,
-          backgroundColor: Colors[colorScheme ?? 'light'].surface,
+          backgroundColor: colorScheme === 'dark' ? 'rgba(28, 28, 30, 0.78)' : 'rgba(255, 255, 255, 0.78)',
           borderWidth: 1,
-          borderColor: Colors[colorScheme ?? 'light'].border,
+          borderColor: colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
           paddingBottom: 8,
           paddingTop: 8,
           shadowColor: '#000',
-          shadowOpacity: 0.08,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: 0.15,
+          shadowRadius: 30,
+          shadowOffset: { width: 0, height: 10 },
           elevation: 12,
+          overflow: 'hidden',
         },
+        tabBarBackground: () => (
+          <BlurView
+            intensity={80}
+            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              borderRadius: 32,
+              overflow: 'hidden',
+            }}
+          />
+        ),
         tabBarLabelStyle: { fontSize: 12, marginBottom: 4 },
         tabBarItemStyle: { marginHorizontal: 4 },
         tabBarHideOnKeyboard: true,

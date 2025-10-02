@@ -2,9 +2,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { ListItem } from '@/components/ui/list-item';
+import { NotificationBadge } from '@/components/ui/notification-badge';
 import { ScreenScroll } from '@/components/ui/screen';
 import { Section } from '@/components/ui/section';
 import { useAuth } from '@/lib/auth';
+import { useNotifications } from '@/lib/notifications';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Alert, StyleSheet, TextInput, View } from 'react-native';
@@ -12,6 +14,7 @@ import { Alert, StyleSheet, TextInput, View } from 'react-native';
 export default function SettingsScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const { unreadCount } = useNotifications();
   const [name, setName] = React.useState(user?.name || '');
   const [department, setDepartment] = React.useState(user?.department || '');
   const [saving, setSaving] = React.useState(false);
@@ -33,6 +36,18 @@ export default function SettingsScreen() {
 
   return (
     <ScreenScroll contentContainerStyle={styles.container}>
+      <Section title="Quick Actions">
+        <ThemedView variant="surface" style={styles.card}>
+          <ListItem
+            icon="bell.fill"
+            title="Notifications"
+            subtitle={`${unreadCount} unread • Real-time updates`}
+            right={<NotificationBadge count={unreadCount} />}
+            onPress={() => router.push('/(tabs)/notifications')}
+          />
+        </ThemedView>
+      </Section>
+
       <Section title="Profile">
         <ThemedView variant="surface" style={styles.card}>
           <View style={{ gap: 8 }}>
@@ -90,7 +105,7 @@ async function apiUpdateMe(input: { name?: string; department?: string }) {
 
 function apiBase() {
   // Reuse the hardcoded URL from http.ts to avoid circular import
-  return 'https://project.nptelprep.ins';
+  return 'https://project.nptelprep.in';
 }
 
 const styles = StyleSheet.create({

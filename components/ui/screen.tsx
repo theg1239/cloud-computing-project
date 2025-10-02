@@ -1,6 +1,6 @@
 import { ThemedView } from '@/components/themed-view';
 import React from 'react';
-import { ScrollView, StyleProp, ViewStyle } from 'react-native';
+import { RefreshControlProps, ScrollView, StyleProp, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export function Screen({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -15,11 +15,22 @@ export function Screen({ children, style }: { children: React.ReactNode; style?:
   );
 }
 
-export function ScreenScroll({ children, contentContainerStyle }: { children: React.ReactNode; contentContainerStyle?: StyleProp<ViewStyle> }) {
+export function ScreenScroll({ 
+  children, 
+  contentContainerStyle,
+  refreshControl 
+}: { 
+  children: React.ReactNode; 
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
+}) {
   return (
     <ThemedView variant="background" style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={[{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 96 }, contentContainerStyle]}>
+        <ScrollView 
+          contentContainerStyle={[{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 96 }, contentContainerStyle]}
+          refreshControl={refreshControl}
+        >
           {children}
         </ScrollView>
       </SafeAreaView>

@@ -114,10 +114,11 @@ const gqlSchema = createSchema({
       type MaintenanceTicket { id: ID!, equipmentId: ID!, labId: ID!, description: String!, reportedByUserId: ID!, assignedToUserId: ID, status: String!, priority: String!, createdAt: String!, updatedAt: String! }
       type Document { id: ID!, type: String!, title: String!, url: String!, version: Int!, uploadedByUserId: ID!, uploadedAt: String! }
       type Experiment { id: ID!, labId: ID!, createdByUserId: ID!, title: String!, description: String, createdAt: String!, documents: [Document!]! }
+      type Notification { id: ID!, userId: ID!, type: String!, message: String!, relatedId: ID, metadata: String, createdAt: String!, read: Boolean! }
       input UploadDocumentInput { type: String!, title: String!, url: String }
       input UpdateMeInput { name: String, department: String }
       input RegisterInput { email: String!, name: String!, roleName: String!, department: String }
-      type Booking { id: ID!, labId: ID!, userId: ID!, startTime: String!, endTime: String!, purpose: String, status: String!, createdAt: String! }
+      type Booking { id: ID!, labId: ID!, userId: ID!, startTime: String!, endTime: String!, purpose: String, status: String!, approvedBy: ID, approvedAt: String, createdAt: String! }
       input CreateBookingInput { labId: ID!, startTime: String!, endTime: String!, purpose: String }
     type Query {
       me: User
@@ -125,9 +126,11 @@ const gqlSchema = createSchema({
       equipment(labId: ID): [Equipment!]!
         labSchedules(labId: ID!, from: String, to: String): [LabSchedule!]!
         myBookings: [Booking!]!
+        pendingBookings: [Booking!]!
         maintenanceTickets: [MaintenanceTicket!]!
         maintenanceTicket(id: ID!): MaintenanceTicket
         experiments: [Experiment!]!
+        myNotifications: [Notification!]!
     }
       type Mutation {
         uploadDocument(experimentId: ID!, input: UploadDocumentInput!): Document!
@@ -135,7 +138,10 @@ const gqlSchema = createSchema({
         login(email: String!): User!
         register(input: RegisterInput!): User!
         createBooking(input: CreateBookingInput!): Booking!
+        approveBooking(id: ID!): Booking!
+        rejectBooking(id: ID!): Booking!
         cancelBooking(id: ID!): Boolean!
+        markNotificationRead(id: ID!): Boolean!
       }
   `,
   resolvers: {
@@ -193,6 +199,18 @@ const gqlSchema = createSchema({
             byExp.set(d.experimentId, arr);
           }
           return exps.map((e) => ({ ...e, documents: byExp.get(e.id) || [] }));
+        },
+        myNotifications: async (_: any, __: any, ctx: any) => {
+          const u = ctx.user;
+          if (!u) throw new GraphQLError('Unauthorized');
+          const rows = await db.select().from(schema.notifications).where(eq(schema.notifications.userId, u.id));
+          return rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        },
+        pendingBookings: async (_: any, __: any, ctx: any) => {
+          const u = ctx.user;
+          if (!u || !can(u.roleName as any, 'booking:approve')) throw new GraphQLError('Forbidden');
+          const rows = await db.select().from(schema.bookings);
+          return rows.filter((b: any) => b.status === 'PENDING');
         },
     },
       Mutation: {
@@ -254,20 +272,89 @@ const gqlSchema = createSchema({
           if (!(labId && startTime && endTime) || end <= start) throw new GraphQLError('Invalid time range');
           // Overlap check: existing confirmed bookings
           const bookings = await db.select().from(schema.bookings).where(eq(schema.bookings.labId, labId));
-          const overlaps = bookings.find((b: any) => b.status === 'CONFIRMED' && !(new Date(b.endTime) <= start || new Date(b.startTime) >= end));
-          if (overlaps) throw new GraphQLError('Slot already booked');
+          const overlaps = bookings.find((b: any) => (b.status === 'CONFIRMED' || b.status === 'PENDING') && !(new Date(b.endTime) <= start || new Date(b.startTime) >= end));
+          if (overlaps) throw new GraphQLError('Slot already booked or pending approval');
           const created = await db
             .insert(schema.bookings)
-            .values({ labId, userId: u.id, startTime: start as any, endTime: end as any, purpose, status: 'CONFIRMED' })
+            .values({ labId, userId: u.id, startTime: start as any, endTime: end as any, purpose, status: 'PENDING' })
             .returning();
-          // Mark overlapping schedules as BOOKED
-          const slots = await db.select().from(schema.labSchedules).where(eq(schema.labSchedules.labId, labId));
-          const toBook = slots.filter((s: any) => !(new Date(s.endTime) <= start || new Date(s.startTime) >= end));
-          for (const s of toBook) {
-            // naive update; in drizzle we would use update() with where id
-            await db.update(schema.labSchedules).set({ status: 'BOOKED' as any }).where(eq(schema.labSchedules.id, s.id));
+          
+          // Create notifications for admins, faculty, and technicians
+          const approvers = await db.select().from(schema.users);
+          const lab = await db.select().from(schema.labs).where(eq(schema.labs.id, labId)).limit(1);
+          const labName = lab[0]?.name || 'Lab';
+          for (const approver of approvers) {
+            if (['ADMIN', 'FACULTY', 'TECHNICIAN'].includes(approver.roleName)) {
+              await db.insert(schema.notifications).values({
+                userId: approver.id,
+                type: 'BOOKING_REQUEST',
+                message: `${u.name} requested to book ${labName} on ${start.toLocaleString()}`,
+                relatedId: created[0].id,
+                metadata: JSON.stringify({ bookingId: created[0].id, labId, userId: u.id }),
+              });
+            }
           }
           return created[0];
+        },
+        approveBooking: async (_: any, args: any, ctx: any) => {
+          const u = ctx.user;
+          if (!u || !can(u.roleName as any, 'booking:approve')) throw new GraphQLError('Forbidden');
+          const id = args.id as string;
+          const rows = await db.select().from(schema.bookings).where(eq(schema.bookings.id, id)).limit(1);
+          const booking = rows[0];
+          if (!booking) throw new GraphQLError('Not found');
+          if (booking.status !== 'PENDING') throw new GraphQLError('Booking is not pending');
+          
+          // Check for conflicts with other approved bookings
+          const bookings = await db.select().from(schema.bookings).where(eq(schema.bookings.labId, booking.labId));
+          const overlaps = bookings.find((b: any) => b.id !== id && b.status === 'CONFIRMED' && !(new Date(b.endTime) <= new Date(booking.startTime) || new Date(b.startTime) >= new Date(booking.endTime)));
+          if (overlaps) throw new GraphQLError('Conflict with existing booking');
+          
+          const updated = await db.update(schema.bookings).set({ 
+            status: 'CONFIRMED' as any, 
+            approvedBy: u.id,
+            approvedAt: new Date() as any
+          }).where(eq(schema.bookings.id, id)).returning();
+          
+          // Mark overlapping schedules as BOOKED
+          const slots = await db.select().from(schema.labSchedules).where(eq(schema.labSchedules.labId, booking.labId));
+          const toBook = slots.filter((s: any) => !(new Date(s.endTime) <= new Date(booking.startTime) || new Date(s.startTime) >= new Date(booking.endTime)));
+          for (const s of toBook) {
+            await db.update(schema.labSchedules).set({ status: 'BOOKED' as any }).where(eq(schema.labSchedules.id, s.id));
+          }
+          
+          // Notify the requester
+          await db.insert(schema.notifications).values({
+            userId: booking.userId,
+            type: 'BOOKING_APPROVED',
+            message: `Your booking request has been approved by ${u.name}`,
+            relatedId: id,
+            metadata: JSON.stringify({ bookingId: id, approvedBy: u.id }),
+          });
+          
+          return updated[0];
+        },
+        rejectBooking: async (_: any, args: any, ctx: any) => {
+          const u = ctx.user;
+          if (!u || !can(u.roleName as any, 'booking:approve')) throw new GraphQLError('Forbidden');
+          const id = args.id as string;
+          const rows = await db.select().from(schema.bookings).where(eq(schema.bookings.id, id)).limit(1);
+          const booking = rows[0];
+          if (!booking) throw new GraphQLError('Not found');
+          if (booking.status !== 'PENDING') throw new GraphQLError('Booking is not pending');
+          
+          const updated = await db.update(schema.bookings).set({ status: 'REJECTED' as any }).where(eq(schema.bookings.id, id)).returning();
+          
+          // Notify the requester
+          await db.insert(schema.notifications).values({
+            userId: booking.userId,
+            type: 'BOOKING_REJECTED',
+            message: `Your booking request has been rejected by ${u.name}`,
+            relatedId: id,
+            metadata: JSON.stringify({ bookingId: id, rejectedBy: u.id }),
+          });
+          
+          return updated[0];
         },
         cancelBooking: async (_: any, args: any, ctx: any) => {
           const u = ctx.user;
@@ -287,6 +374,13 @@ const gqlSchema = createSchema({
               await db.update(schema.labSchedules).set({ status: 'AVAILABLE' as any }).where(eq(schema.labSchedules.id, s.id));
             }
           }
+          return true;
+        },
+        markNotificationRead: async (_: any, args: any, ctx: any) => {
+          const u = ctx.user;
+          if (!u) throw new GraphQLError('Unauthorized');
+          const id = args.id as string;
+          await db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.id, id));
           return true;
         },
       },

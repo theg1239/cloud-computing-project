@@ -38,7 +38,9 @@ export const bookings = pgTable('bookings', {
   startTime: timestamp('start_time', { withTimezone: true }).notNull(),
   endTime: timestamp('end_time', { withTimezone: true }).notNull(),
   purpose: text('purpose'),
-  status: varchar('status', { length: 24 }).notNull().default('CONFIRMED'),
+  status: varchar('status', { length: 24 }).notNull().default('PENDING'),
+  approvedBy: uuid('approved_by'),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -90,6 +92,8 @@ export const notifications = pgTable('notifications', {
   userId: uuid('user_id').notNull(),
   type: varchar('type', { length: 24 }).notNull(),
   message: text('message').notNull(),
+  relatedId: uuid('related_id'),
+  metadata: text('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   read: boolean('read').notNull().default(false),
 });

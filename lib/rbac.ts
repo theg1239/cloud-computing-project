@@ -9,6 +9,7 @@ export type Permission =
   | 'booking:view'
   | 'booking:create'
   | 'booking:manage' // cancel/modify
+  | 'booking:approve'
   | 'maintenance:view'
   | 'maintenance:report'
   | 'maintenance:assign'
@@ -24,6 +25,7 @@ const rolePermissions: Record<Role, Permission[]> = {
     'equipment:request',
     'booking:view',
     'booking:manage',
+    'booking:approve',
     'maintenance:view',
     'maintenance:assign',
     'maintenance:resolve',
@@ -38,6 +40,7 @@ const rolePermissions: Record<Role, Permission[]> = {
     'equipment:request',
     'booking:view',
     'booking:create',
+    'booking:approve',
     'maintenance:view',
     'maintenance:report',
     'experiment:upload',
@@ -58,6 +61,7 @@ const rolePermissions: Record<Role, Permission[]> = {
     'maintenance:view',
     'maintenance:assign',
     'maintenance:resolve',
+    'booking:approve',
   ],
 };
 

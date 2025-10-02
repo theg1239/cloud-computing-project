@@ -17,13 +17,13 @@ function sanitizeUrl(u?: string | null) {
   return u.replace(/\/$/, '');
 }
 // Hardcoded override (dev tunnel)
-const HARDCODED_API_URL = 'https://project.nptelprep.ins';
+const HARDCODED_API_URL = 'https://project.nptelprep.in';
 
 const envUrl = sanitizeUrl(process.env.EXPO_PUBLIC_API_URL as any);
 const extraUrl = sanitizeUrl(Constants.expoConfig?.extra?.API_URL as any);
 let baseUrl = HARDCODED_API_URL || envUrl || extraUrl || '';
 if (Platform.OS === 'android' && baseUrl.startsWith('http://localhost')) {
-  baseUrl = baseUrl.replace('http://localhost', 'https://project.nptelprep.ins');
+  baseUrl = baseUrl.replace('http://localhost', 'https://project.nptelprep.in');
 }
 export const API_URL = baseUrl;
 
