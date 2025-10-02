@@ -90,7 +90,7 @@ async function apiUpdateMe(input: { name?: string; department?: string }) {
 
 function apiBase() {
   // Reuse the hardcoded URL from http.ts to avoid circular import
-  return 'https://0j4dz8qz-8787.inc1.devtunnels.ms';
+  return 'https://project.nptelprep.ins';
 }
 
 const styles = StyleSheet.create({
