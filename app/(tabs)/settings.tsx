@@ -56,7 +56,7 @@ export default function SettingsScreen() {
           </View>
           <View style={{ gap: 8 }}>
             <ThemedText type="subtitle">Role</ThemedText>
-            <ThemedText>{user?.role}</ThemedText>
+            <ThemedText>{(user as any)?.roleName || (user as any)?.role || '—'}</ThemedText>
           </View>
           <View style={{ gap: 8 }}>
             <ThemedText type="subtitle">Name</ThemedText>
@@ -105,7 +105,7 @@ async function apiUpdateMe(input: { name?: string; department?: string }) {
 
 function apiBase() {
   // Reuse the hardcoded URL from http.ts to avoid circular import
-  return 'https://project.nptelprep.in';
+  return 'https://proj.img2pdf.in';
 }
 
 const styles = StyleSheet.create({

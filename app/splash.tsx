@@ -1,163 +1,197 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 
-// Flat background color (no gradient) with subtle decorative shapes + glass card
-// Custom pulse loader replaces ActivityIndicator
+// Redesigned splash: minimalist, purposeful, no gradients, brand monogram + subtle animated progress bar
 export default function SplashScreen() {
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const fade = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
+  const reduceMotion = useRef(false);
+  const [ready, setReady] = useState(false);
+
+  const introOpacity = useRef(new Animated.Value(0)).current;
+  const introTranslate = useRef(new Animated.Value(14)).current;
+  const ringScale = useRef(new Animated.Value(0.6)).current;
+  const barAnim = useRef(new Animated.Value(0)).current; // 0..1 sweep
+  const gridOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(scale, { toValue: 1, duration: 600, easing: Easing.out(Easing.back(1.4)), useNativeDriver: true }),
-      Animated.timing(fade, { toValue: 1, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: true })
+    AccessibilityInfo.isReduceMotionEnabled().then((rm) => {
+      reduceMotion.current = rm;
+      setReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (reduceMotion.current) {
+      introOpacity.setValue(1);
+      introTranslate.setValue(0);
+      ringScale.setValue(1);
+      gridOpacity.setValue(1);
+      return; // no animation
+    }
+    // Staggered entrance
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(ringScale, { toValue: 1, duration: 520, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(gridOpacity, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: true })
+      ]),
+      Animated.delay(40),
+      Animated.parallel([
+        Animated.timing(introOpacity, { toValue: 1, duration: 420, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(introTranslate, { toValue: 0, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ])
     ]).start();
 
+    // Indeterminate loader bar sweep loop
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true })
+        Animated.timing(barAnim, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(barAnim, { toValue: 0, duration: 0, useNativeDriver: true })
       ])
     );
     loop.start();
     return () => loop.stop();
-  }, [scale, fade, pulse]);
+  }, [ready, introOpacity, introTranslate, ringScale, barAnim, gridOpacity]);
 
-  const dotScale = (index: number) => pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: index === 1 ? [0.6, 1] : index === 2 ? [1, 0.6] : [0.8, 1.05]
-  });
+  // Map barAnim 0..1 to translateX across track (overshoot a little for style)
+  const barTranslate = barAnim.interpolate({ inputRange: [0, 1], outputRange: ['-20%', '110%'] });
+
+  const gridDots = GRID_POINTS.map((p, i) => (
+    <Animated.View
+      key={i}
+      style={[
+        styles.gridDot,
+        { left: p[0], top: p[1], opacity: gridOpacity }
+      ]}
+    />
+  ));
 
   return (
-    <View style={styles.root}>
-      {/* Decorative background circles */}
-      <View style={[styles.blob, styles.blobA]} />
-      <View style={[styles.blob, styles.blobB]} />
-      <View style={[styles.blob, styles.blobC]} />
+    <View style={styles.root} accessibilityLabel="Splash screen" accessibilityRole="summary">
+      {/* Subtle decorative grid */}
+      <View style={styles.grid}>{gridDots}</View>
 
-      <Animated.View style={[styles.card, { opacity: fade, transform: [{ scale }] }]}>        
-        <Text style={styles.tagline}>VIT • SMEC</Text>
-        <Text style={styles.title}>Laboratory{Platform.OS !== 'web' ? '\n' : ' '}Management System</Text>
-        <Text style={styles.subtitle}>Cloud-Based Resource & Experiment Platform</Text>
-
-        <View style={styles.divider} />
-
-        <View style={styles.teamWrap}>          
-          <Text style={styles.teamLabel}>Developed for Cloud Computing Project</Text>
-          <View style={styles.badge}><Text style={styles.badgeText}>Team 10</Text></View>
+      <Animated.View style={[styles.monogramWrap, { transform: [{ scale: ringScale }] }]}>        
+        <View style={styles.monogramInner}>
+          <Text style={styles.monogramText}>SMEC</Text>
         </View>
+      </Animated.View>
 
-        <View style={styles.loaderRow} accessibilityLabel="Loading application">
-          {[0,1,2].map(i => (
-            <Animated.View key={i} style={[styles.dot, { transform: [{ scale: dotScale(i) }] }]} />
-          ))}
+      <Animated.View style={[styles.textBlock, { opacity: introOpacity, transform: [{ translateY: introTranslate }] }]}>        
+        <Text style={styles.product}>Lab Management</Text>
+        <Text style={styles.tagline}>{Platform.OS === 'web' ? 'Cloud Resources • Scheduling • Experiments' : 'Cloud Resources  •  Scheduling  •  Experiments'}</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.meta}>Team 10 • Cloud Computing Project</Text>
+        </View>
+        <View style={styles.loaderTrack} accessibilityLabel="Loading">
+          <Animated.View style={[styles.loaderBar, { transform: [{ translateX: barTranslate }] }]} />
         </View>
       </Animated.View>
     </View>
   );
 }
 
+// Precomputed positions for a subtle grid of tiny squares (kept sparse)
+const GRID_POINTS: [number, number][] = [
+  [24, 34],[72, 52],[140, 28],[210, 46],[280, 36],[52, 120],[128, 114],[196, 108],[264, 118],[320, 110],
+  [40, 200],[110, 190],[178, 198],[246, 192],[310, 202],[70, 270],[150, 260],[230, 268],[300, 258]
+];
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#0F1218', // Deep neutral navy
+    backgroundColor: '#0A0A0C',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  grid: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.5
+  },
+  gridDot: {
+    position: 'absolute',
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#1f2933'
+  },
+  monogramWrap: {
+    width: 140,
+    height: 140,
+    borderRadius: 28,
+    backgroundColor: '#121317',
+    borderWidth: 1,
+    borderColor: '#1e2430',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  blob: {
-    position: 'absolute',
-    borderRadius: 9999,
-    opacity: 0.18,
-    backgroundColor: '#4da3ff'
-  },
-  blobA: { width: 260, height: 260, top: -40, left: -60 },
-  blobB: { width: 180, height: 180, bottom: 40, right: -50, backgroundColor: '#6f5bff', opacity: 0.16 },
-  blobC: { width: 140, height: 140, bottom: -30, left: 40, backgroundColor: '#22d3ee', opacity: 0.14 },
-  card: {
-    width: '84%',
-    maxWidth: 460,
-    paddingVertical: 40,
-    paddingHorizontal: 32,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.25)',
-    backdropFilter: 'blur(14px)', // web only
     shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 18,
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 14,
+    marginBottom: 38
+  },
+  monogramInner: {
+    width: 112,
+    height: 112,
+    borderRadius: 24,
+    backgroundColor: '#0F1115',
+    borderWidth: 2,
+    borderColor: '#0A84FF',
     alignItems: 'center',
+    justifyContent: 'center'
+  },
+  monogramText: {
+    color: '#0A84FF',
+    fontSize: 26,
+    fontWeight: '700',
+    letterSpacing: 2
+  },
+  textBlock: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  product: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#F2F2F7',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    textAlign: 'center'
   },
   tagline: {
-    fontSize: 14,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: '#a5b4c8',
-    marginBottom: 12,
-    fontWeight: '600'
-  },
-  title: {
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: '700',
+    fontSize: 13,
+    color: '#A1A1AA',
     textAlign: 'center',
-    color: '#ffffff',
-    marginBottom: 14,
-  },
-  subtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    color: '#d0d8e5',
     marginBottom: 28,
-    fontWeight: '500'
+    lineHeight: 18,
+    maxWidth: 320
   },
-  divider: {
-    height: 1,
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginBottom: 24,
-  },
-  teamWrap: {
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 30,
+    marginBottom: 26
   },
-  teamLabel: {
-    color: '#b9c4d3',
-    fontSize: 13,
-    maxWidth: 220,
-    lineHeight: 18,
+  meta: {
+    fontSize: 12,
+    color: '#5f6672',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontWeight: '600'
   },
-  badge: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    shadowColor: '#2563eb',
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+  loaderTrack: {
+    width: 180,
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: '#1c1f26',
+    overflow: 'hidden'
   },
-  badgeText: { color: '#fff', fontWeight: '700', fontSize: 12, letterSpacing: 0.5 },
-  loaderRow: {
-    flexDirection: 'row',
-    gap: 14,
-    marginTop: 4,
-  },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#60a5fa',
-    shadowColor: '#60a5fa',
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+  loaderBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '28%',
+    borderRadius: 4,
+    backgroundColor: '#0A84FF'
   }
 });

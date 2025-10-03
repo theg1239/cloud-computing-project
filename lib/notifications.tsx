@@ -90,7 +90,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 export function useNotifications() {
   const context = useContext(NotificationContext);
   if (!context) {
-    throw new Error('useNotifications must be used within NotificationProvider');
+    // Graceful fallback to prevent crashes if provider is temporarily missing
+    if (__DEV__) {
+      console.warn('[notifications] useNotifications called without provider – returning empty fallback');
+    }
+    return {
+      notifications: [],
+      unreadCount: 0,
+      refresh: async () => {},
+      markAsRead: async () => {},
+      loading: false,
+    } as NotificationContextType;
   }
   return context;
 }
